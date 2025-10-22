@@ -1,138 +1,130 @@
 import streamlit as st
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import plotly.express as px
 import pandas as pd
 
 # --- Configuración de la Página de Streamlit ---
 st.set_page_config(layout="wide")
-st.title("Dashboard de Rendimiento Estudiantil")
+st.title("Dashboard de Repitencia Estudiantil")
 
-# --- 1. Preparar los Datos (Función de caché igual) ---
+# --- 1. Preparar los Datos (Tu código original) ---
+# Usamos @st.cache_data para que los datos no se recarguen
 @st.cache_data
 def load_data():
-    x_labels = [
-        'Ciencias Adminitrativas', 'Ciencias Biológicas', 'Ciencias Contables', 'Ciencias Económicas',
-        'Ciencias Físicas','Ciencias Matemáticas','Ciencias Sociales','Derecho y Ciencia Política',
-        'Educación','Farmacia y Bioquímica','Ingenierías de\nSistemas y Informática',
-        'Ingeniería\nElectrónica y Eléctrica','Ingeniería Geológica, Minera,\n Metalúrgica y Geográfica',
-        'Ingeniería Industrial','Letras y Ciencias Humanas','Medicina','Medicina Veterinaria',
-        'Odontología','Psicología','Química e Ingeniería Química'
+    data = []
+    x_labels = ['Contabilidad', 'Ingeniería\nIndustrial', 'Derecho', 'Economía\nPública', 'Educación\nFísica']
+    valores = [
+        [548, 33, 3, 0],
+        [412, 14, 3, 0],
+        [376, 22, 0, 0],
+        [348, 10, 1, 0],
+        [334, 14, 2, 0]
     ]
-    grupo3 = [2606, 571, 2011, 1248, 290, 466, 1315, 1343, 1496, 513, 1059, 1189, 913, 937, 444, 902, 325, 328, 1044, 575]  # Invictos
-    grupo2 = [438, 331, 1465, 960, 609, 834, 620, 580, 598, 212, 622, 968, 898, 690, 794, 559, 106, 94, 141, 755]      # Desaprobados
-    grupo1 = [inv + des for inv, des in zip(grupo3, grupo2)] # Matriculados
-    porcentaje_lineaA = [round(inv / total * 100, 1) if total > 0 else 0 for inv, total in zip(grupo3, grupo1)]
-    porcentaje_lineaB = [round(des / total * 100, 1) if total > 0 else 0 for des, total in zip(grupo2, grupo1)]
 
-    df = pd.DataFrame({
-        'Escuela': x_labels,
-        'Matriculados': grupo1,
-        'Desaprobados': grupo2,
-        'Invictos': grupo3,
-        '% Invictos': porcentaje_lineaA,
-        '% Desaprobados': porcentaje_lineaB
-    })
+    for fac, vals in zip(x_labels, valores):
+        for i, v in enumerate(vals):
+            # Añadimos un filtro para no incluir datos con 0 estudiantes
+            if v > 0: 
+                data.append({'Escuela': fac, 'Repitencia': f'{i+1}°', 'Estudiantes': v})
+    
+    df = pd.DataFrame(data)
     return df
 
 df = load_data()
 all_schools = df['Escuela'].unique()
+all_repitencias = sorted(df['Repitencia'].unique())
 
 # --- 2. Crear los Widgets de Filtro en la Barra Lateral ---
 st.sidebar.header("Filtros del Dashboard")
 
-# Filtro 1: Selección de Escuelas (Igual que antes)
+# Filtro 1: Selección de Escuelas
 selected_schools = st.sidebar.multiselect(
     'Seleccione las escuelas:',
     options=all_schools,
     default=all_schools
 )
 
-# <-- NUEVO: Filtro 2: Ordenar el gráfico -->
-sort_by = st.sidebar.selectbox(
-    'Ordenar por:',
-    options=['Matriculados', 'Invictos', 'Desaprobados', '% Invictos', '% Desaprobados'],
-    index=0 # Por defecto, ordena por 'Matriculados'
+# Filtro 2: Selección de Nivel de Repitencia
+selected_repitencias = st.sidebar.multiselect(
+    'Seleccione nivel de repitencia:',
+    options=all_repitencias,
+    default=all_repitencias
 )
 
-# <-- NUEVO: Filtro 3: Mostrar/Ocultar Tabla -->
+# Filtro 3: Ordenar el gráfico
+sort_order = st.sidebar.radio(
+    'Ordenar por total de estudiantes:',
+    options=['Descendente', 'Ascendente'],
+    index=0 # Por defecto, Descendente
+)
+
+# Filtro 4: Mostrar/Ocultar Tabla
 show_table = st.sidebar.checkbox('Mostrar tabla de datos', value=False)
 
 
-# --- 3. Filtrar y Ordenar los Datos ---
-if not selected_schools:
-    dff = df.copy() # Si no hay selección, usa todos los datos
-else:
-    dff = df[df['Escuela'].isin(selected_schools)].copy()
+# --- 3. Filtrar los Datos ---
+# Filtramos el DataFrame basado en las selecciones
+dff = df[
+    df['Escuela'].isin(selected_schools) &
+    df['Repitencia'].isin(selected_repitencias)
+]
 
-# Aplica el orden
-dff = dff.sort_values(by=sort_by, ascending=False)
-
-
-# --- 4. <-- NUEVO: Mostrar KPIs (Métricas Clave) ---
+# --- 4. Mostrar KPIs (Métricas Clave) ---
 st.subheader("Métricas Totales (Según Filtro)")
 
-# Calcular totales
-total_matriculados = dff['Matriculados'].sum()
-total_invictos = dff['Invictos'].sum()
-total_desaprobados = dff['Desaprobados'].sum()
+total_estudiantes = dff['Estudiantes'].sum()
+num_escuelas = len(dff['Escuela'].unique())
 
-# Usar columnas para poner las métricas una al lado de la otra
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Matriculados", f"{total_matriculados:,}")
-col2.metric("Total Invictos", f"{total_invictos:,}")
-col3.metric("Total Desaprobados", f"{total_desaprobados:,}")
+col1, col2 = st.columns(2)
+col1.metric("Escuelas Seleccionadas", f"{num_escuelas}")
+col2.metric("Total Estudiantes (con repitencia)", f"{total_estudiantes:,}")
 
 st.markdown("---") # Línea divisoria
 
-# --- 5. Crear la Figura de Plotly (El código del gráfico es el mismo) ---
-# (Ahora usa 'dff' que está filtrado Y ordenado)
-st.subheader("Gráfico Comparativo por Escuela")
+# --- 5. Preparar y Mostrar el Gráfico ---
+st.subheader("Gráfico Comparativo de Repitencias")
 
-fig = make_subplots(specs=[[{"secondary_y": True}]])
+# Si no hay datos, muestra un mensaje
+if dff.empty:
+    st.warning("No hay datos para mostrar con los filtros seleccionados.")
+else:
+    # Lógica para ordenar el eje X del gráfico
+    # 1. Agrupamos por escuela y sumamos los estudiantes
+    df_agg = dff.groupby('Escuela')['Estudiantes'].sum().reset_index()
+    
+    # 2. Ordenamos
+    sort_asc = (sort_order == 'Ascendente')
+    df_agg = df_agg.sort_values(by='Estudiantes', ascending=sort_asc)
+    
+    # 3. Creamos una lista con el orden de las escuelas
+    sorted_schools_list = df_agg['Escuela'].tolist()
 
-# Barras
-fig.add_trace(
-    go.Bar(
-        x=dff['Escuela'], y=dff['Matriculados'], name='Matriculados', 
-        marker_color='blue', text=dff['Matriculados'], textposition='outside'
-    ), secondary_y=False)
-fig.add_trace(
-    go.Bar(x=dff['Escuela'], y=dff['Desaprobados'], name='Desaprobados', marker_color='red'),
-    secondary_y=False)
-fig.add_trace(
-    go.Bar(x=dff['Escuela'], y=dff['Invictos'], name='Invictos', marker_color='green'),
-    secondary_y=False)
+    # 4. Creamos el gráfico con Plotly Express (tu código)
+    fig = px.bar(
+        dff, 
+        x='Escuela', 
+        y='Estudiantes', 
+        color='Repitencia', 
+        barmode='group',
+        title='Estudiantes por Repitencia y Escuela Profesional',
+        text='Estudiantes' # Añade el valor sobre la barra
+    )
 
-# Líneas
-fig.add_trace(
-    go.Scatter(
-        x=dff['Escuela'], y=dff['% Invictos'], name='% Invictos', 
-        mode='lines+markers+text', line=dict(color='orange', width=1.5),
-        text=dff['% Invictos'].apply(lambda x: f'{x}%'), textposition='top center'
-    ), secondary_y=True)
-fig.add_trace(
-    go.Scatter(
-        x=dff['Escuela'], y=dff['% Desaprobados'], name='% Desaprobados', 
-        mode='lines+markers+text', line=dict(color='purple', width=1.5, dash='dash'),
-        text=dff['% Desaprobados'].apply(lambda x: f'{x}%'), textposition='bottom center'
-    ), secondary_y=True)
+    # 5. Aplicamos el orden al eje X
+    fig.update_layout(
+        xaxis_title='Escuela Profesional', 
+        yaxis_title='Estudiantes',
+        height=600,
+        # Aquí le decimos a Plotly el orden exacto del eje X
+        xaxis={'categoryorder':'array', 'categoryarray': sorted_schools_list} 
+    )
+    fig.update_traces(textposition='outside') # Pone el texto fuera de la barra
 
-# Layout del gráfico
-fig.update_layout(
-    barmode='group',
-    height=700,
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    xaxis_tickangle=-45
-)
-fig.update_yaxes(title_text="Estudiantes", secondary_y=False)
-fig.update_yaxes(title_text="%Porcentajes", range=[0, 100], secondary_y=True)
+    # 6. Mostrar el Gráfico
+    st.plotly_chart(fig, use_container_width=True)
 
-# --- 6. Mostrar el Gráfico en Streamlit ---
-st.plotly_chart(fig, use_container_width=True)
-
-# --- 7. <-- NUEVO: Mostrar la Tabla de Datos (si está activado) ---
+# --- 6. Mostrar la Tabla de Datos (si está activado) ---
 if show_table:
     st.markdown("---")
     st.subheader("Datos Filtrados y Ordenados")
-    # Mostramos el dataframe, usando 'Escuela' como el índice para que se vea más limpio
-    st.dataframe(dff.set_index('Escuela'))
+    # Mostramos el dataframe filtrado
+    st.dataframe(dff)
