@@ -4,12 +4,10 @@ from plotly.subplots import make_subplots
 import pandas as pd
 
 # --- Configuración de la Página de Streamlit ---
-# (Esto reemplaza a fig.update_layout)
 st.set_page_config(layout="wide")
 st.title("Dashboard de Rendimiento Estudiantil")
 
-# --- 1. Preparar los Datos (Igual que antes) ---
-# Usamos @st.cache_data para que los datos no se recarguen cada vez
+# --- 1. Preparar los Datos (Función de caché igual) ---
 @st.cache_data
 def load_data():
     x_labels = [
@@ -39,22 +37,57 @@ def load_data():
 df = load_data()
 all_schools = df['Escuela'].unique()
 
-# --- 2. Crear el Widget de Filtro (Reemplaza a ipywidgets) ---
-# Esto crea el menú de selección múltiple en una barra lateral
+# --- 2. Crear los Widgets de Filtro en la Barra Lateral ---
 st.sidebar.header("Filtros del Dashboard")
+
+# Filtro 1: Selección de Escuelas (Igual que antes)
 selected_schools = st.sidebar.multiselect(
     'Seleccione las escuelas:',
     options=all_schools,
-    default=all_schools # Por defecto, muestra todas
+    default=all_schools
 )
 
-# --- 3. Filtrar los Datos ---
-if not selected_schools:
-    dff = df
-else:
-    dff = df[df['Escuela'].isin(selected_schools)]
+# <-- NUEVO: Filtro 2: Ordenar el gráfico -->
+sort_by = st.sidebar.selectbox(
+    'Ordenar por:',
+    options=['Matriculados', 'Invictos', 'Desaprobados', '% Invictos', '% Desaprobados'],
+    index=0 # Por defecto, ordena por 'Matriculados'
+)
 
-# --- 4. Crear la Figura de Plotly (Igual que antes) ---
+# <-- NUEVO: Filtro 3: Mostrar/Ocultar Tabla -->
+show_table = st.sidebar.checkbox('Mostrar tabla de datos', value=False)
+
+
+# --- 3. Filtrar y Ordenar los Datos ---
+if not selected_schools:
+    dff = df.copy() # Si no hay selección, usa todos los datos
+else:
+    dff = df[df['Escuela'].isin(selected_schools)].copy()
+
+# Aplica el orden
+dff = dff.sort_values(by=sort_by, ascending=False)
+
+
+# --- 4. <-- NUEVO: Mostrar KPIs (Métricas Clave) ---
+st.subheader("Métricas Totales (Según Filtro)")
+
+# Calcular totales
+total_matriculados = dff['Matriculados'].sum()
+total_invictos = dff['Invictos'].sum()
+total_desaprobados = dff['Desaprobados'].sum()
+
+# Usar columnas para poner las métricas una al lado de la otra
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Matriculados", f"{total_matriculados:,}")
+col2.metric("Total Invictos", f"{total_invictos:,}")
+col3.metric("Total Desaprobados", f"{total_desaprobados:,}")
+
+st.markdown("---") # Línea divisoria
+
+# --- 5. Crear la Figura de Plotly (El código del gráfico es el mismo) ---
+# (Ahora usa 'dff' que está filtrado Y ordenado)
+st.subheader("Gráfico Comparativo por Escuela")
+
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
 # Barras
@@ -94,5 +127,12 @@ fig.update_layout(
 fig.update_yaxes(title_text="Estudiantes", secondary_y=False)
 fig.update_yaxes(title_text="%Porcentajes", range=[0, 100], secondary_y=True)
 
-# --- 5. Mostrar el Gráfico en Streamlit ---
+# --- 6. Mostrar el Gráfico en Streamlit ---
 st.plotly_chart(fig, use_container_width=True)
+
+# --- 7. <-- NUEVO: Mostrar la Tabla de Datos (si está activado) ---
+if show_table:
+    st.markdown("---")
+    st.subheader("Datos Filtrados y Ordenados")
+    # Mostramos el dataframe, usando 'Escuela' como el índice para que se vea más limpio
+    st.dataframe(dff.set_index('Escuela'))
